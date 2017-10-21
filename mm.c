@@ -26,13 +26,13 @@ team_t team = {
     /* Team name */
     "Team Rocket",
     /* First member's full name */
-    "Rasmus Lüscher",
-    /* First member's email address */
-    "lrasmus@student.ethz.ch",
-    /* Second member's full name (leave blank if none) */
     "Mario Stöckli",
+    /* First member's email address */
+    "stmario@student.ethz.ch",
+    /* Second member's full name (leave blank if none) */
+    "Rasmus Lüscher",
     /* Second member's email address (leave blank if none) */
-    "stmario@student.ethz.ch"
+    "lrasmus@student.ethz.ch"
 };
 
 /* single word (4) or double word (8) alignment */
@@ -43,12 +43,17 @@ team_t team = {
 
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
+#define CHAR_SIZE (ALIGN(sizeof(char)))
 
 /* 
  * mm_init - initialize the malloc package.
  */
 int mm_init(void)
 {
+	void *p = mem_heap_lo // initialize whole heap as free block of heapsize
+	*(char *)p = 1; //it is free
+	size_t sz = mem_heapsize();
+	(size_t *)((char *)p + SIZE_T_SIZE) = sz; // store size of free block
     return 0;
 }
 
@@ -58,14 +63,41 @@ int mm_init(void)
  */
 void *mm_malloc(size_t size)
 {
-    int newsize = ALIGN(size + SIZE_T_SIZE);
-    void *p = mem_sbrk(newsize);
-    if (p == (void *)-1)
-	return NULL;
-    else {
-        *(size_t *)p = size;
-        return (void *)((char *)p + SIZE_T_SIZE);
-    }
+	char free = 0;
+    int newsize = ALIGN(CHAR_SIZE + size + SIZE_T_SIZE); //sizeof char because we store the free bit at the start.
+	void *s = mem_heap_lo(); //s initialized to list start. in while loop iterates through list.
+	void *hi = mem_heap_hi();
+	
+	//check first separately, so we can use while loop after
+	if ((*(char *)s == 1) && (*(size_t *)(*(char *)s + CHAR_SIZE) >= size){ // return pointer to place, set free bit to 0, store size of allocated block;
+		*(size_t *)s = 0;
+		// TODO: store size of block
+		// return pointer to start of payload
+		}
+
+	while (*(size_t *)s /= 1){ 
+	//loop through implicit list until place found or list full
+	
+		//TODO: increment pointer s by block size + 2xsizeof(char)
+
+
+		if ((*(char *)s == 1) && (*(size_t *)(*(char *)s + CHAR_SIZE) >= size){
+			// TODO: return pointer to payload, set free bit to 0, store size of allocated block;
+		}
+		else if (s + *(s + sizeof(char)) >= hi){ //if pointer address + block size are bigger than adress of last byte in memory, allocate new memory with sbrk
+
+		// TODO: store free bit, store size, change return pointer arithmetic to additional free byte and size_t bytes.
+			void *p = mem_sbrk(newsize);
+		    if (p == (void *)-1)
+			return NULL;
+		    else {
+			*(size_t *)p = size;
+			return (void *)((char *)p + SIZE_T_SIZE);
+		    }
+		}
+	}
+	
+    
 }
 
 /*
