@@ -105,10 +105,6 @@ void *mm_malloc(size_t size)
  */
 void mm_free(void *ptr)
 {
-<<<<<<< HEAD
-=======
-
->>>>>>> e59401b80228cebbcffb0c4a327248adf6a46837
 }
 
 /*
