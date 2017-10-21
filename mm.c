@@ -61,7 +61,7 @@ int mm_init(void)
  * mm_malloc - Allocate a block by incrementing the brk pointer.
  *     Always allocate a block whose size is a multiple of the alignment.
  */
-void *mm_malloc(size_t size) //allocate momory
+void *mm_malloc(size_t size)
 {
 	char free = 0;
     int newsize = ALIGN(CHAR_SIZE + size + SIZE_T_SIZE); //sizeof char because we store the free bit at the start.
