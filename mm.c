@@ -53,19 +53,27 @@ team_t team = {
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 
-//definitions for easier pointer arithmetic later.
-#define BLOCK_SIZE(size) (ALIGN(SIZE_T_SIZE + size + SIZE_T_SIZE))
+//define size of internal fragmentation
+#define INTERNAL_FRAGMENTATION (SIZE_T_SIZE * 2)
+
+/* mask to read free bit or size of block*/
+#define FREE_BIT 0x1
+#define SIZE_BITS (~FREE_BIT)
 
 /* 
  * mm_init - initialize the malloc package.
  */
 int mm_init(void)
 {
-	void *p = mem_heap_lo // initialize whole heap as free block of heapsize
-	size_t sz = ALIGN(mem_heapsize());
-	*(size_t *)p = sz; // store size of free block
-	*(size_t *)p = 1; //it is free
-    return 0;
+	void *p = mem_heap_lo();
+		if (p == NULL)
+			return -1;
+	assert(mem_heapsize() == 0);
+	mem_sbrk(INTERNAL_FRAGMENTATION);
+	assert(mem_heapsize() == INTERNAL_FRAGMENTATION);
+	*(size_t *)p = mem_heapsize() - INTERNAL_FRAGMENTATION; //size of payload == 0
+	assert(*(size_t *)p == 0);
+    return *(size_t *)p;
 }
 
 /* 
@@ -74,42 +82,35 @@ int mm_init(void)
  */
 void *mm_malloc(size_t size)
 {
-	char free = 0;
-    int newsize = BLOCK_SIZE(size); //sizeof char because we store the free bit at the start.
-	void *s = mem_heap_lo(); //s initialized to list start. in while loop iterates through list.
-	void *hi = mem_heap_hi();
-	
-	//check first separately, so we can use while loop after
-	if ((*(size_t *)s & 1) && ((*(size_t *)s & ~0x7) >= size){ // return pointer to place, set free bit to 0, store size of allocated block;
-		*(size_t *)s = 0;
-		// TODO: store size of block
-		// return pointer to start of payload
-		}
-	
-	
-	while (*(size_t *)s /= 1){ 
-	//loop through implicit list until place found or list full
-	
-		//TODO: increment pointer s by block size + 2xsizeof(char)
-
-
-		if ((*(size_t *)s & 1) && ((*(size_t *)s & ~0x7) >= size){
-			// TODO: return pointer to payload, set free bit to 0, store size of allocated block;
-		}
-		else if (s + *(s + SIZE_T_SIZE) >= hi){ //if pointer address + block size are bigger than adress of last byte in memory, allocate new memory with sbrk
-
-		// TODO: store free bit, store size, change return pointer arithmetic to additional free byte and size_t bytes.
-			void *p = mem_sbrk(newsize);
-		    if (p == (void *)-1)
-			return NULL;
-		    else {
-			*(size_t *)p = size;
-			return (void *)((char *)p + SIZE_T_SIZE);
-		    }
-		}
+	void *p = mem_heap_lo(); //First-fit;
+	size_t new_block_size = ALIGN(size + INTERNAL_FRAGMENTATION);
+	size_t old_size =(*(size_t *)p & SIZE_BITS);
+	size_t old_block_size = ALIGN(old_size + INTERNAL_FRAGMENTATION);
+	//while p not past heap and block not free or too small
+	while (((char *)p < (char *)mem_heap_hi()) && 
+	((*(size_t *)p & FREE_BIT) ||  (old_block_size < new_block_size))) {
+		old_size = *(size_t *)p & SIZE_BITS;
+		old_block_size = ALIGN(old_size + INTERNAL_FRAGMENTATION);
+		p = (void *)((char *)p + old_block_size); // go to next block
 	}
-	
-    
+	if ((char *)p > (char *)mem_heap_hi() ) { //if pointer ist past heap
+		p = (void *)((char *)p - old_block_size);
+		if (*(size_t *)p & FREE_BIT){
+			p = (void *)((char*)mem_sbrk(new_block_size));
+		} else { //if last block in heap was free, but size too small
+			assert(ALIGN((char *)mem_heap_hi() - (char *)p) == ((char *)mem_heap_hi() + 1 - (char *)p));
+			int addsize = new_block_size - ALIGN((char *)mem_heap_hi() - (char *)p);
+			mem_sbrk(addsize);
+		}
+//		assert ((char *)p + new_block_size == (char *)mem_heap_hi() + 1);
+    	}
+	if (old_block_size > new_block_size){ //if new block is smaller then old block we have to split
+		*(size_t *)((char *)p + new_block_size) = old_size - new_block_size;
+//		*(size_t *)((char *)p + old_block_size - SIZE_T_SIZE) = old_size - new_block_size;
+	}
+	*(size_t *)p = size | FREE_BIT;
+	*(size_t *)((char *)p + new_block_size - SIZE_T_SIZE) = size | FREE_BIT;
+	return (void *)((char *)p + SIZE_T_SIZE);
 }
 
 /*
@@ -117,6 +118,15 @@ void *mm_malloc(size_t size)
  */
 void mm_free(void *ptr)
 {
+	void *p = (void *)((char *)ptr - SIZE_T_SIZE); //pointer to this block
+	size_t sp = ALIGN(*(size_t *)p & SIZE_BITS);
+	void *q = (void *)((char *)p  + INTERNAL_FRAGMENTATION + sp); //pointer to next block
+	size_t sq = ALIGN(*(size_t *)q & SIZE_BITS);
+	if (*(size_t *)q & FREE_BIT){
+		*(size_t *)p = sp; //mark this block as free
+	} else {
+		*(size_t *)p = sp + sq; //coalece this block with next
+	}
 }
 
 /*
