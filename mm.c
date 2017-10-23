@@ -10,7 +10,7 @@ ________________________________________________________
 --> Space required:
 sizeof(size_t) + size + sizeof(size_t)
 Because size_t gets aligned, we store the free_bit in the first (LSB) 3 bits of size --> we get the free bit with:
-*(size_t *)(ADRESS_OF_SIZE) & 0x7
+*(size_t *)(ADRESS_OF_SIZE) & 0x1
 
  *
  * NOTE TO STUDENTS: Replace this header comment with your own header
@@ -108,7 +108,7 @@ void *mm_malloc(size_t size)
 		*(size_t *)((char *)p + new_block_size) = old_size - new_block_size;
 //		*(size_t *)((char *)p + old_block_size - SIZE_T_SIZE) = old_size - new_block_size;
 	}
-	*(size_t *)p = size | FREE_BIT;
+	*(size_t *)p = size | FREE_BIT;  //TODO:@Rasmus: warum ist der Block am ende free? Am Ende des allocaten sollte er doch als belegt markiert werden.
 	*(size_t *)((char *)p + new_block_size - SIZE_T_SIZE) = size | FREE_BIT;
 	return (void *)((char *)p + SIZE_T_SIZE);
 }
@@ -119,10 +119,10 @@ void *mm_malloc(size_t size)
 void mm_free(void *ptr)
 {
 	void *p = (void *)((char *)ptr - SIZE_T_SIZE); //pointer to this block
-	size_t sp = ALIGN(*(size_t *)p & SIZE_BITS);
+	size_t sp = ALIGN(*(size_t *)p & SIZE_BITS); //TODO:@Rasmus: warum ALIGN hier?
 	void *q = (void *)((char *)p  + INTERNAL_FRAGMENTATION + sp); //pointer to next block
 	size_t sq = ALIGN(*(size_t *)q & SIZE_BITS);
-	if (*(size_t *)q & FREE_BIT){
+	if (*(size_t *)q & FREE_BIT){  //TODO:@Rasmus: Sind die beiden Zeilen nicht vertauscht?
 		*(size_t *)p = sp; //mark this block as free
 	} else {
 		*(size_t *)p = sp + sq; //coalece this block with next
