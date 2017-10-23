@@ -1,10 +1,17 @@
 /*
  * mm-naive.c - The fastest, least memory-efficient malloc package.
  * 
- * In this naive approach, a block is allocated by simply incrementing
- * the brk pointer.  A block is pure payload. There are no headers or
- * footers.  Blocks are never coalesced or reused. Realloc is
- * implemented directly using mm_malloc and mm_free.
+ *
+
+We use an implicit doubly linked list. Each block has the following format:
+________________________________________________________
+|size|free_bit|		payload		|size|free_bit|
+________________________________________________________
+--> Space required:
+sizeof(size_t) + size + sizeof(size_t)
+Because size_t gets aligned, we store the free_bit in the first (LSB) 3 bits of size --> we get the free bit with:
+*(size_t *)(ADRESS_OF_SIZE) & 0x7
+
  *
  * NOTE TO STUDENTS: Replace this header comment with your own header
  * comment that gives a high level description of your solution.
@@ -35,6 +42,8 @@ team_t team = {
     "lrasmus@student.ethz.ch"
 };
 
+
+
 /* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
 
@@ -43,7 +52,9 @@ team_t team = {
 
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
-#define CHAR_SIZE (ALIGN(sizeof(char)))
+
+//definitions for easier pointer arithmetic later.
+#define BLOCK_SIZE(size) (ALIGN(SIZE_T_SIZE + size + SIZE_T_SIZE))
 
 /* 
  * mm_init - initialize the malloc package.
@@ -51,9 +62,9 @@ team_t team = {
 int mm_init(void)
 {
 	void *p = mem_heap_lo // initialize whole heap as free block of heapsize
-	*(char *)p = 1; //it is free
-	size_t sz = mem_heapsize();
-	(size_t *)((char *)p + SIZE_T_SIZE) = sz; // store size of free block
+	size_t sz = ALIGN(mem_heapsize());
+	*(size_t *)p = sz; // store size of free block
+	*(size_t *)p = 1; //it is free
     return 0;
 }
 
@@ -64,27 +75,28 @@ int mm_init(void)
 void *mm_malloc(size_t size)
 {
 	char free = 0;
-    int newsize = ALIGN(CHAR_SIZE + size + SIZE_T_SIZE); //sizeof char because we store the free bit at the start.
+    int newsize = BLOCK_SIZE(size); //sizeof char because we store the free bit at the start.
 	void *s = mem_heap_lo(); //s initialized to list start. in while loop iterates through list.
 	void *hi = mem_heap_hi();
 	
 	//check first separately, so we can use while loop after
-	if ((*(char *)s == 1) && (*(size_t *)(*(char *)s + CHAR_SIZE) >= size){ // return pointer to place, set free bit to 0, store size of allocated block;
+	if ((*(size_t *)s & 1) && ((*(size_t *)s & ~0x7) >= size){ // return pointer to place, set free bit to 0, store size of allocated block;
 		*(size_t *)s = 0;
 		// TODO: store size of block
 		// return pointer to start of payload
 		}
-
+	
+	
 	while (*(size_t *)s /= 1){ 
 	//loop through implicit list until place found or list full
 	
 		//TODO: increment pointer s by block size + 2xsizeof(char)
 
 
-		if ((*(char *)s == 1) && (*(size_t *)(*(char *)s + CHAR_SIZE) >= size){
+		if ((*(size_t *)s & 1) && ((*(size_t *)s & ~0x7) >= size){
 			// TODO: return pointer to payload, set free bit to 0, store size of allocated block;
 		}
-		else if (s + *(s + sizeof(char)) >= hi){ //if pointer address + block size are bigger than adress of last byte in memory, allocate new memory with sbrk
+		else if (s + *(s + SIZE_T_SIZE) >= hi){ //if pointer address + block size are bigger than adress of last byte in memory, allocate new memory with sbrk
 
 		// TODO: store free bit, store size, change return pointer arithmetic to additional free byte and size_t bytes.
 			void *p = mem_sbrk(newsize);
