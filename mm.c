@@ -129,14 +129,14 @@ void mm_free(void *ptr)
 	
 	*(size_t *)p = sp; //mark p-block as free
 	*(size_t *)((char *)p + sp) = sp;
-	if (q < mem_heap_hi() && r > mem_heap_lo()){
+	if (q < mem_heap_hi()){
 		if (!(*(size_t *)q & ALLOC_BIT)){
 			*(size_t *)p = sp + sq; //coalece this block with next
 			*(size_t *)q = sp + sq;
 	/*
 			if (r > mem_heap_lo() && !(*(size_t *)r & ALLOC_BIT)){
-				*(size_t *)q = sp + sq + sr + 2*INTERNAL_FRAGMENTATION; //coalece this block with next
-				*(size_t *)r = sp + sq + sr + 2*INTERNAL_FRAGMENTATION;
+				*(size_t *)q = sp + sq + sr; //coalece this block with next
+				*(size_t *)r = sp + sq + sr;
 			}
 	*/	}
 	}
