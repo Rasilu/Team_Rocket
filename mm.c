@@ -5,11 +5,11 @@
 
 We use an implicit doubly linked list. Each block has the following format:
 ________________________________________________________
-|size|free_bit|		payload		|size|free_bit|
+|size|ALLOC_BIT|		payload		|size|ALLOC_BIT|
 ________________________________________________________
 --> Space required:
 sizeof(size_t) + size + sizeof(size_t)
-Because size_t gets aligned, we store the free_bit in the first (LSB) 3 bits of size --> we get the free bit with:
+Because size_t gets aligned, we store the ALLOC_BIT in the first (LSB) 3 bits of size --> we get the free bit with:
 *(size_t *)(ADRESS_OF_SIZE) & 0x1
 
  *
@@ -57,8 +57,8 @@ team_t team = {
 #define INTERNAL_FRAGMENTATION (SIZE_T_SIZE * 2)
 
 /* mask to read free bit or size of block*/
-#define FREE_BIT 0x1
-#define SIZE_BITS (~FREE_BIT)
+#define ALLOC_BIT 0x1 //renamed FREE_BIT to avoid confusion
+#define SIZE_BITS (~ALLOC_BIT)
 
 /* 
  * mm_init - initialize the malloc package.
@@ -88,14 +88,14 @@ void *mm_malloc(size_t size)
 	size_t old_block_size = ALIGN(old_size + INTERNAL_FRAGMENTATION);
 	//while p not past heap and block not free or too small
 	while (((char *)p < (char *)mem_heap_hi()) && 
-	((*(size_t *)p & FREE_BIT) ||  (old_block_size < new_block_size))) {
+	((*(size_t *)p & ALLOC_BIT) ||  (old_block_size < new_block_size))) {
 		old_size = *(size_t *)p & SIZE_BITS;
 		old_block_size = ALIGN(old_size + INTERNAL_FRAGMENTATION);
 		p = (void *)((char *)p + old_block_size); // go to next block
 	}
 	if ((char *)p > (char *)mem_heap_hi() ) { //if pointer ist past heap
 		p = (void *)((char *)p - old_block_size);
-		if (*(size_t *)p & FREE_BIT){
+		if (*(size_t *)p & ALLOC_BIT){
 			p = (void *)((char*)mem_sbrk(new_block_size));
 		} else { //if last block in heap was free, but size too small
 			assert(ALIGN((char *)mem_heap_hi() - (char *)p) == ((char *)mem_heap_hi() + 1 - (char *)p));
@@ -108,8 +108,8 @@ void *mm_malloc(size_t size)
 		*(size_t *)((char *)p + new_block_size) = old_size - new_block_size;
 //		*(size_t *)((char *)p + old_block_size - SIZE_T_SIZE) = old_size - new_block_size;
 	}
-	*(size_t *)p = size | FREE_BIT;  //TODO:@Rasmus: warum ist der Block am ende free? Am Ende des allocaten sollte er doch als belegt markiert werden.
-	*(size_t *)((char *)p + new_block_size - SIZE_T_SIZE) = size | FREE_BIT;
+	*(size_t *)p = size | ALLOC_BIT;
+	*(size_t *)((char *)p + new_block_size - SIZE_T_SIZE) = size | ALLOC_BIT;
 	return (void *)((char *)p + SIZE_T_SIZE);
 }
 
@@ -119,13 +119,26 @@ void *mm_malloc(size_t size)
 void mm_free(void *ptr)
 {
 	void *p = (void *)((char *)ptr - SIZE_T_SIZE); //pointer to this block
-	size_t sp = ALIGN(*(size_t *)p & SIZE_BITS); //TODO:@Rasmus: warum ALIGN hier?
+	size_t sp = ALIGN(*(size_t *)p & SIZE_BITS) + SIZE_T_SIZE;
 	void *q = (void *)((char *)p  + INTERNAL_FRAGMENTATION + sp); //pointer to next block
-	size_t sq = ALIGN(*(size_t *)q & SIZE_BITS);
-	if (*(size_t *)q & FREE_BIT){  //TODO:@Rasmus: Sind die beiden Zeilen nicht vertauscht?
-		*(size_t *)p = sp; //mark this block as free
-	} else {
-		*(size_t *)p = sp + sq; //coalece this block with next
+	size_t sq = ALIGN(*(size_t *)q & SIZE_BITS) + SIZE_T_SIZE;
+	void *r = (void *)((char *)p - INTERNAL_FRAGMENTATION); //pointer to previous block
+	size_t sr = ALIGN(*(size_t *)r & SIZE_BITS) + SIZE_T_SIZE;
+	q = (void *)((char *)q + sq);
+	r = (void *)((char *)r - sr);
+	
+	*(size_t *)p = sp; //mark p-block as free
+	*(size_t *)((char *)p + sp) = sp;
+	if (q < mem_heap_hi() && r > mem_heap_lo()){
+		if (!(*(size_t *)q & ALLOC_BIT)){
+			*(size_t *)p = sp + sq; //coalece this block with next
+			*(size_t *)q = sp + sq;
+	/*
+			if (r > mem_heap_lo() && !(*(size_t *)r & ALLOC_BIT)){
+				*(size_t *)q = sp + sq + sr + 2*INTERNAL_FRAGMENTATION; //coalece this block with next
+				*(size_t *)r = sp + sq + sr + 2*INTERNAL_FRAGMENTATION;
+			}
+	*/	}
 	}
 }
 
